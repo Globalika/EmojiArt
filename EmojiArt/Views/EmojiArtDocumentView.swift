@@ -13,7 +13,7 @@ struct EmojiArtDocumentView: View {
     var body: some View {
         content()
         HStack {
-            palette
+            PaletteChooser(emojiFontSize: Constants.defaultEmojiSize)
             deleteButton(buttonText: (selectedEmojis.count <= 1) ?
                    "Delete Emoji" :
                    "Delete \(selectedEmojis.count) Emojis")
@@ -21,10 +21,7 @@ struct EmojiArtDocumentView: View {
         }
     }
     
-    var palette: some View {
-        ScrollingEmojisView(emojis: Constants.testEmojis)
-            .font(.system(size: Constants.defaultEmojiSize))
-    }
+
     
     private func deleteButton(buttonText: String) -> some View {
         return Button(buttonText) {
@@ -45,15 +42,20 @@ struct EmojiArtDocumentView: View {
                     OptionalImage(uiImage: document.backgroundImage)
                         .scaleEffect(zoomScale)
                         .offset(panOffset)
-                } .gesture(doubleTapToZoom(in: geometry.size))
-                ForEach(document.emojis) { emoji in
-                    Text(emoji.text)
-                        .border(Color.blue, width: selectedEmojis.contains(matching: emoji) ? 2 : 0)
-                        .font(animatableWithSize: self.scale(for: emoji))
-                        .position(position(for: emoji, in: geometry.size))
-                        .zIndex(selectedEmojis.contains(matching: emoji) ? 1 : 0)
-                        .gesture(tapToSelect(emoji: emoji))
-                        .gesture(panEmojiGesture(emoji: emoji))
+                }
+                .gesture(doubleTapToZoom(in: geometry.size))
+                if document.backgroundImageFetchStatus == .fetching {
+                    ProgressView().scaleEffect(2)
+                } else {
+                    ForEach(document.emojis) { emoji in
+                        Text(emoji.text)
+                            .border(Color.blue, width: selectedEmojis.contains(matching: emoji) ? 2 : 0)
+                            .font(animatableWithSize: self.scale(for: emoji))
+                            .position(position(for: emoji, in: geometry.size))
+                            .zIndex(selectedEmojis.contains(matching: emoji) ? 1 : 0)
+                            .gesture(tapToSelect(emoji: emoji))
+                            .gesture(panEmojiGesture(emoji: emoji))
+                    }
                 }
             }
             .gesture(panGesture()
@@ -66,7 +68,29 @@ struct EmojiArtDocumentView: View {
                 location = CGPoint(x: location.x / self.zoomScale, y: location.y / self.zoomScale)
                 return self.drop(providers: providers, at: location)
             }
+            .alert(item: $alertToShow) { alertToShow in
+                alertToShow.alert()
+            }
+            .onChange(of: document.backgroundImageFetchStatus) { status in
+                switch status {
+                case .failed(let url):
+                    showBackgroundImageFetchFailedAlert(url)
+                default:
+                    break
+                }
+            }
         }
+    }
+    
+    @State private var alertToShow: IdentifiableAlert?
+    
+    private func showBackgroundImageFetchFailedAlert(_ url: URL) {
+        alertToShow = IdentifiableAlert(id: "fetch failed: " + url.absoluteString, alert: {
+            Alert(title: Text("Background Image Fetch"),
+                  message: Text("Couldn`t load image from \(url)."),
+                  dismissButton: .default(Text("OK"))
+            )
+        })
     }
     
     // MARK: - Select Emoji
@@ -227,7 +251,7 @@ struct EmojiArtDocumentView: View {
     
     private func drop(providers: [NSItemProvider], at location: CGPoint) -> Bool {
         var found = providers.loadFirstObject(ofType: URL.self) { url in
-            self.document.setBackgroundURL(url)
+            self.document.setBackground(.url(url.imageURL))
         }
         if !found {
             found = providers.loadObjects(ofType: String.self) { string in
@@ -238,7 +262,6 @@ struct EmojiArtDocumentView: View {
     }
     
     struct Constants {
-        static let testEmojis: String = "⚽️🏀🏈⚾️🎾🏐🏉🎱🏓🏸🪃⛳️🪁🏹🥊🥋🛹🛼🥌"
         static let defaultEmojiSize: CGFloat = 40
     }
 }

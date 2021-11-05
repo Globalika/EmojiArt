@@ -4,10 +4,11 @@
 //
 //  Created by Volodymyr Seredovych on 27.10.2021.
 //
+
 import Foundation
 
 struct EmojiArt: Codable {
-    var backgroundURL: URL?
+    var background = Background.blank
     var emojis: [Emoji] = []
     
     struct Emoji: Identifiable, Hashable, Codable {

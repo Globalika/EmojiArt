@@ -23,7 +23,7 @@ extension EmojiArt {
                 self = .blank
             }
         }
-
+        
         enum CodingKeys: String, CodingKey {
             case url = "theURL"
             case imageData

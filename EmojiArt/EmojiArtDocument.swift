@@ -12,6 +12,9 @@ class EmojiArtDocument: ObservableObject
     @Published private(set) var emojiArt: EmojiArt {
         didSet {
             scheduleAutosave()
+            if emojiArt.background != oldValue.background {
+                fetchBackgroundImageDataIfNecessary()
+            }
         }
     }
     private var autosaveTimer: Timer?
@@ -52,20 +55,55 @@ class EmojiArtDocument: ObservableObject
         }
     }
     
-    private static let untitled = "EmojiArtDocument.Untitled"
+    //private static let untitled = "EmojiArtDocument.Untitled"
     
     init() {
         if let url = Autosave.url, let autosavedEmojiArt = try? EmojiArt(url: url) {
             emojiArt = autosavedEmojiArt
+            fetchBackgroundImageDataIfNecessary()
         } else {
             emojiArt = EmojiArt()
         }
-        fetchBackgroundImageData()
     }
 
     var emojis: [EmojiArt.Emoji] { emojiArt.emojis }
+    var background: EmojiArt.Background { emojiArt.background }
 
     @Published var backgroundImage: UIImage?
+    @Published var backgroundImageFetchStatus = BackgroundImageFetchStatus.idle
+    
+    enum BackgroundImageFetchStatus: Equatable {
+        case idle
+        case fetching
+        case failed(URL)
+    }
+    
+    private func fetchBackgroundImageDataIfNecessary() {
+        backgroundImage = nil
+        switch emojiArt.background {
+        case .url(let url):
+            // fetch the url
+            backgroundImageFetchStatus = .fetching
+            DispatchQueue.global(qos: .userInitiated).async {
+                let imageData = try? Data(contentsOf: url)
+                DispatchQueue.main.async { [weak self] in
+                    if self?.emojiArt.background == EmojiArt.Background.url(url) {
+                        self?.backgroundImageFetchStatus = .idle
+                        if imageData != nil {
+                            self?.backgroundImage = UIImage(data: imageData!)
+                        }
+                        if self?.backgroundImage == nil {
+                            self?.backgroundImageFetchStatus = .failed(url)
+                        }
+                    }
+                }
+            }
+        case .imageData(let data):
+            backgroundImage = UIImage(data: data)
+        case .blank:
+            break
+        }
+    }
     
     // MARK: - Intents(s)
     
@@ -91,25 +129,11 @@ class EmojiArtDocument: ObservableObject
         emojiArt.deleteEmoji(emoji)
     }
     
-    func setBackgroundURL(_ url: URL?) {
-        emojiArt.backgroundURL = url?.imageURL
-        fetchBackgroundImageData()
+    func setBackground(_ background: EmojiArt.Background) {
+        emojiArt.background = background
     }
     
-    private func fetchBackgroundImageData() {
-        backgroundImage = nil
-        if let url = self.emojiArt.backgroundURL {
-            DispatchQueue.global(qos: .userInitiated).async {
-                if let imageData = try? Data(contentsOf: url) {
-                    DispatchQueue.main.async {
-                        if url == self.emojiArt.backgroundURL {
-                            self.backgroundImage = UIImage(data: imageData)
-                        }
-                    }
-                }
-            }
-        }
-    }
+
 }
 
 extension EmojiArt.Emoji {
